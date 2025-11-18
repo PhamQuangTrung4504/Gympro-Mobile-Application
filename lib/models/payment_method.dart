@@ -1,6 +1,8 @@
 enum PaymentMethodType {
   banking,
   cash, // For demo purposes
+  momo, // MoMo e-wallet
+  bankQR, // Bank QR code
 }
 
 class PaymentMethod {

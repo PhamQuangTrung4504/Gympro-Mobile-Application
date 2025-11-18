@@ -172,6 +172,10 @@ class PaymentTransaction {
         return 'Chuyển khoản ngân hàng';
       case PaymentMethodType.cash:
         return 'Thanh toán tại quầy';
+      case PaymentMethodType.momo:
+        return 'Thanh toán MoMo';
+      case PaymentMethodType.bankQR:
+        return 'QR Ngân hàng';
     }
   }
 

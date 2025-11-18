@@ -40,14 +40,14 @@ class UserMembershipManagementView extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       child: TextField(
-        onChanged: (value) => controller.updateSearchQuery(value),
+        onChanged: (value) => controller.updateMembershipSearchQuery(value),
         decoration: InputDecoration(
           hintText: 'Tìm kiếm theo tên hoặc email...',
           prefixIcon: const Icon(Icons.search),
           suffixIcon: Obx(() {
-            if (controller.searchQuery.value.isNotEmpty) {
+            if (controller.membershipSearchQuery.value.isNotEmpty) {
               return IconButton(
-                onPressed: () => controller.updateSearchQuery(''),
+                onPressed: () => controller.updateMembershipSearchQuery(''),
                 icon: const Icon(Icons.clear),
               );
             }
@@ -76,6 +76,12 @@ class UserMembershipManagementView extends StatelessWidget {
           final status = controller.getMembershipStatus(m);
           return status == 'Chờ thanh toán';
         }).length;
+        final pendingActivationCount = memberships.where((m) {
+          final paymentStatus = (m['paymentStatus'] ?? '').toString().toLowerCase();
+          final isActive = m['isActive'] ?? false;
+          final explicit = (m['status'] ?? '').toString().toLowerCase();
+          return explicit == 'pending_activation' || (paymentStatus == 'completed' && (isActive == false || isActive == null));
+        }).length;
         final expiredCount = memberships.where((m) {
           final status = controller.getMembershipStatus(m);
           return status == 'Đã hết hạn';
@@ -87,28 +93,40 @@ class UserMembershipManagementView extends StatelessWidget {
               'Tổng số',
               memberships.length.toString(),
               Colors.blue,
-              false,
+              controller.membershipFilter.value == '' || controller.membershipFilter.value == 'all',
+              onTap: () => controller.updateMembershipFilter(''),
+            ),
+            const SizedBox(width: 12),
+            _buildStatCard(
+              'Chờ kích hoạt',
+              pendingActivationCount.toString(),
+              Colors.teal,
+              controller.membershipFilter.value == 'pending_activation',
+              onTap: () => controller.updateMembershipFilter('pending_activation'),
             ),
             const SizedBox(width: 12),
             _buildStatCard(
               'Hoạt động',
               activeCount.toString(),
               Colors.green,
-              false,
+              controller.membershipFilter.value == 'active',
+              onTap: () => controller.updateMembershipFilter('active'),
             ),
             const SizedBox(width: 12),
             _buildStatCard(
               'Chờ thanh toán',
               pendingCount.toString(),
               Colors.orange,
-              false,
+              controller.membershipFilter.value == 'pending_payment',
+              onTap: () => controller.updateMembershipFilter('pending_payment'),
             ),
             const SizedBox(width: 12),
             _buildStatCard(
               'Hết hạn',
               expiredCount.toString(),
               Colors.red,
-              false,
+              controller.membershipFilter.value == 'expired',
+              onTap: () => controller.updateMembershipFilter('expired'),
             ),
           ],
         );
@@ -120,43 +138,47 @@ class UserMembershipManagementView extends StatelessWidget {
     String title,
     String count,
     Color color,
-    bool isSelected,
-  ) {
+    bool isSelected, {
+    VoidCallback? onTap,
+  }) {
     return Expanded(
-      child: Container(
-        height: 100,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? color : color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? color : color.withOpacity(0.3),
-            width: isSelected ? 2 : 1,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 100,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected ? color : color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? color : color.withOpacity(0.3),
+              width: isSelected ? 2 : 1,
+            ),
           ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              count,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : color,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                count,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : color,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: isSelected
-                    ? Colors.white.withOpacity(0.9)
-                    : color.withOpacity(0.8),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected
+                      ? Colors.white.withOpacity(0.9)
+                      : color.withOpacity(0.8),
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -175,17 +197,7 @@ class UserMembershipManagementView extends StatelessWidget {
         return _buildNoMembershipsState();
       }
 
-      final memberships = controller.userMemberships;
-      final searchQuery = controller.searchQuery.value.toLowerCase();
-
-      final filteredMemberships = searchQuery.isEmpty
-          ? memberships
-          : memberships.where((m) {
-              final userName = (m['userName'] ?? '').toLowerCase();
-              final userEmail = (m['userEmail'] ?? '').toLowerCase();
-              return userName.contains(searchQuery) ||
-                  userEmail.contains(searchQuery);
-            }).toList();
+      final filteredMemberships = controller.filteredUserMemberships;
 
       if (filteredMemberships.isEmpty) {
         return _buildNoResultsState();
@@ -336,6 +348,21 @@ class UserMembershipManagementView extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                // Quick activate button when payment completed but not active
+                if (primaryStatus == 'Chưa kích hoạt' && secondaryStatus == 'Đã thanh toán')
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        await controller.updateUserMembershipStatus(membership['id'], true);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        minimumSize: const Size(80, 36),
+                      ),
+                      child: const Text('Kích hoạt', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
                 PopupMenuButton<String>(
                   onSelected: (value) => _handleMembershipAction(
                     context,

@@ -12,7 +12,6 @@ import '../views/admin/exercise_management_view.dart';
 import '../views/admin/membership_card_management_view.dart';
 import '../views/admin/user_membership_management_view.dart';
 import '../views/membership/membership_purchase_view.dart';
-import '../views/membership/checkout_view.dart' as MembershipCheckout;
 import '../views/payment/payment_status_view.dart';
 import '../views/payment/payment_result_view.dart';
 import '../views/exercise/exercise_list_view.dart';
@@ -30,6 +29,9 @@ import '../views/admin/checkin_checkout_view.dart';
 import '../views/admin/admin_statistics_view.dart';
 import '../views/user/my_membership_cards_view.dart';
 import '../views/membership/membership_card_export_view.dart';
+import '../views/checkout/momo_payment_view.dart';
+import '../views/checkout/bank_qr_payment_view.dart';
+import '../views/test/payment_methods_test_view.dart';
 
 // News Management imports
 import '../screens/admin/news_management_screen.dart';
@@ -93,10 +95,19 @@ class AppPages {
       binding: MembershipPurchaseBinding(),
     ),
     GetPage(name: '/test-checkout', page: () => const TestCheckoutView()),
+    GetPage(name: '/test-payment-methods', page: () => const PaymentMethodsTestView()),
     GetPage(name: '/checkout', page: () => GeneralCheckout.CheckoutView()),
     GetPage(
       name: AppRoutes.directPaymentConfirmation,
       page: () => const DirectPaymentConfirmationView(),
+    ),
+    GetPage(
+      name: AppRoutes.momoPayment,
+      page: () => MoMoPaymentView(),
+    ),
+    GetPage(
+      name: AppRoutes.bankQRPayment,
+      page: () => const BankQRPaymentView(),
     ),
     GetPage(
       name: AppRoutes.paymentStatus,

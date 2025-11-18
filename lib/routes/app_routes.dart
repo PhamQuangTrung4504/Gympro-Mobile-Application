@@ -14,6 +14,9 @@ abstract class AppRoutes {
   static const membershipPurchase = '/membership-purchase';
   static const checkout = '/checkout';
   static const directPaymentConfirmation = '/direct-payment-confirmation';
+  static const momoPayment = '/momo-payment';
+  static const bankQRPayment = '/bank-qr-payment';
+  static const testPaymentMethods = '/test-payment-methods';
   static const paymentStatus = '/payment/status';
   static const paymentResult = '/payment-result';
   static const exercises = '/exercises';

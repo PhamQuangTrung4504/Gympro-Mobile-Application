@@ -22,6 +22,9 @@ class MemberManagementController extends GetxController {
       <Map<String, dynamic>>[].obs;
   final RxList<Map<String, dynamic>> filteredUserMemberships =
       <Map<String, dynamic>>[].obs;
+  // Membership specific filters
+  final RxString membershipFilter = ''.obs; // e.g. '', 'pending_activation', 'active', 'pending_payment', 'expired'
+  final RxString membershipSearchQuery = ''.obs;
 
   @override
   void onInit() {
@@ -33,6 +36,9 @@ class MemberManagementController extends GetxController {
     // Listen to search query changes
     searchQuery.listen((_) => _applyFilters());
     selectedRole.listen((_) => _applyFilters());
+    // Listen to membership filters/search
+    membershipSearchQuery.listen((_) => _applyMembershipFilters());
+    membershipFilter.listen((_) => _applyMembershipFilters());
   }
 
   // Statistics getters with error handling
@@ -234,10 +240,79 @@ class MemberManagementController extends GetxController {
 
       userMemberships.value = memberships;
       filteredUserMemberships.value = memberships;
+      // Apply any active filters
+      _applyMembershipFilters();
     } catch (e) {
       print('Error loading user memberships: $e');
+      // If it's a permission issue, surface a helpful message to the admin
+      try {
+        if (e is FirebaseException) {
+          final code = e.code?.toLowerCase() ?? '';
+          if (code.contains('permission') || code.contains('unauth')) {
+            Get.snackbar(
+              'Quyền truy cập bị từ chối',
+              'Tài khoản hiện tại không có quyền liệt kê tất cả thẻ. Kiểm tra users/{uid}.role == "admin" trong Firestore Console hoặc dùng backend (Firebase Admin SDK).',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: const Color(0xFFF44336),
+              colorText: const Color(0xFFFFFFFF),
+            );
+          }
+        }
+      } catch (_) {}
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  void updateMembershipFilter(String filter) {
+    membershipFilter.value = filter;
+  }
+
+  void updateMembershipSearchQuery(String q) {
+    membershipSearchQuery.value = q;
+  }
+
+  void _applyMembershipFilters() {
+    try {
+      List<Map<String, dynamic>> filtered = userMemberships.toList();
+
+      final search = membershipSearchQuery.value.trim().toLowerCase();
+      if (search.isNotEmpty) {
+        filtered = filtered.where((m) {
+          final userName = (m['userName'] ?? '').toString().toLowerCase();
+          final userEmail = (m['userEmail'] ?? '').toString().toLowerCase();
+          final cardName = (m['membershipType'] ?? m['membershipCardName'] ?? '').toString().toLowerCase();
+          return userName.contains(search) || userEmail.contains(search) || cardName.contains(search);
+        }).toList();
+      }
+
+      final filter = membershipFilter.value;
+      if (filter.isNotEmpty) {
+        if (filter == 'pending_activation') {
+          filtered = filtered.where((m) {
+            final paymentStatus = (m['paymentStatus'] ?? '').toString().toLowerCase();
+            final isActive = m['isActive'] ?? false;
+            return (paymentStatus == 'completed') && (isActive == false || isActive == null);
+          }).toList();
+        } else if (filter == 'active') {
+          filtered = filtered.where((m) {
+            return getMembershipStatus(m) == 'Đang hoạt động';
+          }).toList();
+        } else if (filter == 'pending_payment') {
+          filtered = filtered.where((m) {
+            return getMembershipStatus(m) == 'Chờ thanh toán';
+          }).toList();
+        } else if (filter == 'expired') {
+          filtered = filtered.where((m) {
+            return getMembershipStatus(m) == 'Đã hết hạn';
+          }).toList();
+        }
+      }
+
+      filteredUserMemberships.value = filtered;
+    } catch (e) {
+      print('Error applying membership filters: $e');
+      filteredUserMemberships.value = userMemberships.toList();
     }
   }
 

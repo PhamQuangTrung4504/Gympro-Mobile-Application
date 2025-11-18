@@ -142,6 +142,72 @@ class CheckoutView extends StatelessWidget {
               ),
             ),
 
+            const SizedBox(height: 12),
+
+            // MoMo Payment Option
+            Obx(
+              () => Card(
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6B35),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.phone_android,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text('Thanh toán MoMo'),
+                  subtitle: const Text('Nhanh chóng và an toàn'),
+                  trailing: Radio<String>(
+                    value: 'momo',
+                    groupValue: controller.selectedPaymentType.value,
+                    onChanged: (value) {
+                      controller.selectedPaymentType.value = value!;
+                    },
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Bank QR Payment Option
+            Obx(
+              () => Card(
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A8A),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.qr_code_2,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text('QR Ngân hàng'),
+                  subtitle: const Text('Quét mã QR từ app ngân hàng'),
+                  trailing: Radio<String>(
+                    value: 'bank_qr',
+                    groupValue: controller.selectedPaymentType.value,
+                    onChanged: (value) {
+                      controller.selectedPaymentType.value = value!;
+                    },
+                    activeColor: const Color(0xFF1E3A8A),
+                  ),
+                ),
+              ),
+            ),
+
             const Spacer(),
 
             // Payment Button

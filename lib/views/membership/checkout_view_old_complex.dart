@@ -824,6 +824,10 @@ class CheckoutView extends StatelessWidget {
         return Colors.blue;
       case PaymentMethodType.cash:
         return Colors.green;
+      case PaymentMethodType.momo:
+        return const Color(0xFFFF6B35);
+      case PaymentMethodType.bankQR:
+        return const Color(0xFF1E3A8A);
     }
   }
 
@@ -833,6 +837,10 @@ class CheckoutView extends StatelessWidget {
         return Icons.account_balance;
       case PaymentMethodType.cash:
         return Icons.attach_money;
+      case PaymentMethodType.momo:
+        return Icons.phone_android;
+      case PaymentMethodType.bankQR:
+        return Icons.qr_code_2;
     }
   }
 

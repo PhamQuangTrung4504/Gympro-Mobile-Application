@@ -102,8 +102,54 @@ class CheckoutController extends GetxController {
             'transaction': transaction,
           },
         );
+      } else if (selectedPaymentType.value == 'momo') {
+        // MoMo payment
+        transaction = PaymentTransaction(
+          id: transactionId,
+          userId: currentUser?.id ?? '',
+          membershipCardId: membershipCard!.id,
+          membershipPurchaseId: purchaseId,
+          paymentType: PaymentType.membership,
+          paymentMethod: PaymentMethodType.momo,
+          amount: membershipCard!.price,
+          status: PaymentStatus.pending,
+          createdAt: DateTime.now(),
+          description: 'Mua ${membershipCard!.cardName} - MoMo',
+        );
+
+        // Navigate to MoMo payment page
+        Get.toNamed(
+          '/momo-payment',
+          arguments: {
+            'membershipCard': membershipCard,
+            'transaction': transaction,
+          },
+        );
+      } else if (selectedPaymentType.value == 'bank_qr') {
+        // Bank QR payment
+        transaction = PaymentTransaction(
+          id: transactionId,
+          userId: currentUser?.id ?? '',
+          membershipCardId: membershipCard!.id,
+          membershipPurchaseId: purchaseId,
+          paymentType: PaymentType.membership,
+          paymentMethod: PaymentMethodType.bankQR,
+          amount: membershipCard!.price,
+          status: PaymentStatus.pending,
+          createdAt: DateTime.now(),
+          description: 'Mua ${membershipCard!.cardName} - QR Banking',
+        );
+
+        // Navigate to Bank QR payment page
+        Get.toNamed(
+          '/bank-qr-payment',
+          arguments: {
+            'membershipCard': membershipCard,
+            'transaction': transaction,
+          },
+        );
       } else {
-        // Banking payment
+        // Default to banking payment
         transaction = PaymentTransaction(
           id: transactionId,
           userId: currentUser?.id ?? '',

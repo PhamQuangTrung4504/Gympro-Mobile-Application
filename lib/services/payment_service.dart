@@ -53,6 +53,12 @@ class PaymentService {
       case PaymentMethodType.cash:
         enrichedTransaction = transaction;
         break;
+      case PaymentMethodType.momo:
+        enrichedTransaction = transaction;
+        break;
+      case PaymentMethodType.bankQR:
+        enrichedTransaction = await _createBankingPayment(transaction);
+        break;
     }
 
     // Update in Firestore
@@ -247,7 +253,10 @@ Nội dung: $transferContent''',
         'paymentMethod': transactionData['paymentMethod'] ?? 'banking',
         'paymentStatus': 'completed',
         'transactionId': transactionId,
-        'isActive': true, // Activate immediately for successful payments
+        // Don't activate automatically: let admin confirm/activate the card
+        'isActive': false,
+        // Add an explicit status to help admin filter / identify new paid memberships
+        'status': 'pending_activation',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
