@@ -106,7 +106,6 @@ flutter:
     - assets/images/user/
     - assets/images/logoapp/
     - assets/images/chatai/
-    - assets/animations/
     # AI Chat Data
     - lib/features/ai_chat/data/bmi.json
     - lib/features/ai_chat/data/bmr.json

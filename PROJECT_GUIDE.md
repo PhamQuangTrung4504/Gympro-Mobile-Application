@@ -219,32 +219,7 @@ flutter run -d windows
 
 - Use the available task: Flutter Run.
 
-### Node Helper Scripts (Optional)
-
-```bash
-npm install
-npm run backend
-npm run dev
-```
-
-Note: npm run backend currently points to a missing file path and will fail until package.json is updated or the target server file is added.
-
-## 10. Release Build
-
-```bash
-flutter build apk --release
-flutter build appbundle --release
-flutter build web --release
-flutter build windows --release
-```
-
-## 11. Quality and Operational Notes
-
-- The repository contains some experimental or legacy variants in places, which indicates iterative optimization history.
-- Firebase environment separation (development vs production) should be strictly managed before release.
-- Automated tests should be expanded for key business flows: authentication, payments, orders, and QR check-in.
-
-## 12. Short HR-Oriented Conclusion
+## 10. Short Conclusion
 
 GymPro is a practical, production-style fitness platform project that demonstrates complete product engineering capability:
 
