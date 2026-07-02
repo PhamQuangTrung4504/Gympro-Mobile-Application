@@ -1,18 +1,23 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http; // THÊM THƯ VIỆN HTTP
 import '../models/chat_message.dart';
 import '../services/ai_data_service.dart';
 import '../services/body_metrics_calculator.dart';
 import '../services/ai_engine.dart';
 
-/// Controller cho AI Chat với AI Engine thông minh
+/// Controller cho AI Chat kết nối song song AWS Cloud API và Local Engine
 class AIChatController extends GetxController {
   final RxList<ChatMessage> _messages = <ChatMessage>[].obs;
   final RxBool _isTyping = false.obs;
   final RxBool _isChatOpen = false.obs;
   final Rx<Offset> _iconPosition = Offset.zero.obs;
 
-  // AI Services
+  // Địa chỉ AWS API Gateway chính thức của bạn
+  final String awsApiUrl = 'https://0lyzd4srec.execute-api.us-east-1.amazonaws.com/v1/ai-chat';
+
+  // AI Services (Giữ lại để dự phòng hoặc làm Local Fallback)
   late final AIDataService _dataService;
   late final BodyMetricsCalculator _calculator;
   late final AIEngine _aiEngine;
@@ -43,15 +48,11 @@ class AIChatController extends GetxController {
 
   /// Scroll xuống tin nhắn mới nhất
   void scrollToBottom() {
-    // Đợi cho đến khi ScrollController có clients và đã render xong
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (scrollController.hasClients) {
-        // Delay nhỏ để đảm bảo UI đã render xong
         await Future.delayed(const Duration(milliseconds: 100));
-
         if (scrollController.hasClients) {
           final position = scrollController.position;
-          // Scroll hoàn toàn xuống cuối để tin nhắn mới hiển thị
           scrollController.animateTo(
             position.maxScrollExtent,
             duration: const Duration(milliseconds: 300),
@@ -72,7 +73,7 @@ class AIChatController extends GetxController {
       _aiEngine = AIEngine(_dataService, _calculator);
 
       _addWelcomeMessage();
-      print('✅ AI Chat Controller initialized successfully');
+      print('✅ AI Chat Controller kết nối AWS Cloud sẵn sàng');
     } catch (e) {
       print('❌ Error initializing AI: $e');
       _addErrorMessage();
@@ -84,22 +85,20 @@ class AIChatController extends GetxController {
       ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         content: '''
- Xin chào! Tôi là Gym Pro AI trợ lý thông minh của bạn!
+ Xin chào! Tôi là Gym Pro AI trợ lý đám mây thông minh của bạn!
 
  Tôi có thể giúp bạn:
 • Tính BMI, BMR, TDEE
-• Tư vấn bài tập
-• Gợi ý dinh dưỡng
-• Lịch tập chi tiết
-• Thông tin gói thẻ
+• Tư vấn bài tập sinh động
+• Gợi ý thực đơn dinh dưỡng
+• Lịch tập chuyên sâu theo thể trạng
 
-Bạn cần giúp gì? 
+Bạn cần giúp gì hôm nay? 
 ''',
         isUser: false,
         timestamp: DateTime.now(),
       ),
     );
-    // Không auto scroll khi hiện welcome message
   }
 
   void _addErrorMessage() {
@@ -119,17 +118,16 @@ Bạn cần giúp gì?
 
   void openChat() {
     _isChatOpen.value = true;
-    // Không auto scroll khi mở chat
   }
 
   void closeChat() {
     _isChatOpen.value = false;
   }
 
+  /// GỬI TIN NHẮN LÊN AWS LAMBDA
   Future<void> sendMessage(String content) async {
     if (content.trim().isEmpty) return;
 
-    // Thêm tin nhắn của user
     final userMessage = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       content: content.trim(),
@@ -138,44 +136,74 @@ Bạn cần giúp gì?
     );
     _messages.add(userMessage);
 
-    // Scroll đến tin nhắn user vừa gửi
+    // Tự động cuộn xuống dưới xem tin nhắn vừa gửi
     scrollToBottom();
-
-    // Hiển thị typing indicator
     _isTyping.value = true;
 
     try {
-      // Xử lý tin nhắn qua AI Engine
-      await Future.delayed(
-        const Duration(milliseconds: 500),
-      ); // Simulate thinking
-      final response = await _aiEngine.processMessage(content);
+      print("🚀 Đang gửi request lên AWS API Gateway...");
+      
+      // Thực hiện cuộc gọi HTTP POST lên Đám mây AWS
+      final response = await http.post(
+        Uri.parse(awsApiUrl),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "message": content.trim(), // Truyền tin nhắn của người dùng lên Lambda
+        }),
+      ).timeout(const Duration(seconds: 15)); // Giới hạn timeout 15s đề phòng mạng lag
 
       _isTyping.value = false;
 
-      // Thêm tin nhắn phản hồi của AI
-      final aiMessage = ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: response,
-        isUser: false,
-        timestamp: DateTime.now(),
-      );
-      _messages.add(aiMessage);
+      if (response.statusCode == 200) {
+        // Giải mã JSON nhận về từ AWS Lambda
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final String aiResponse = responseData['message'] ?? 'Không nhận được phản hồi từ AI.';
 
-      // KHÔNG scroll khi AI trả lời - để user đọc ở vị trí hiện tại
+        final aiMessage = ChatMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: aiResponse,
+          isUser: false,
+          timestamp: DateTime.now(),
+        );
+        _messages.add(aiMessage);
+      } else {
+        // Nếu API lỗi (Ví dụ: 403, 404, 500), tự động dùng Engine Local làm phương án dự phòng (Fallback)
+        print("⚠️ AWS lỗi (Mã lỗi ${response.statusCode}), chuyển sang dùng Local Engine...");
+        final localResponse = await _aiEngine.processMessage(content);
+        
+        _messages.add(ChatMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: "[Offline Mode] $localResponse",
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      }
+      
+      scrollToBottom(); // Cuộn tiếp khi nhận được câu trả lời
     } catch (e) {
       _isTyping.value = false;
-
-      // Thêm tin nhắn lỗi
-      final errorMessage = ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: 'Xin lỗi, có lỗi xảy ra khi xử lý tin nhắn của bạn. 😔\n\n$e',
-        isUser: false,
-        timestamp: DateTime.now(),
-      );
-      _messages.add(errorMessage);
-
-      // KHÔNG scroll khi có lỗi - để user đọc ở vị trí hiện tại
+      print("❌ Lỗi mạng khi gọi AWS: $e. Sử dụng Local Fallback...");
+      
+      // Nếu mất mạng hoàn toàn, tiếp tục dùng Local Engine làm Fallback cứu cánh
+      try {
+        final localResponse = await _aiEngine.processMessage(content);
+        _messages.add(ChatMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: "[Offline Mode] $localResponse",
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+        scrollToBottom();
+      } catch (localError) {
+        _messages.add(ChatMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: 'Không thể kết nối đến máy chủ AWS và Local Engine cũng gặp lỗi. 😔\n\n$e',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      }
     }
   }
 
