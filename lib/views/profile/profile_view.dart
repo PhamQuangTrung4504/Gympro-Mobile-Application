@@ -8,7 +8,7 @@ import '../../models/user_account.dart';
 import '../../routes/app_routes.dart';
 import '../../services/qr_checkin_service.dart';
 import '../../widgets/loading_overlay.dart';
-import '../../widgets/loading_button.dart';
+import 'package:gympro/services/gympro_storage_service.dart';
 
 class ProfileView extends StatelessWidget {
   const ProfileView({super.key});
@@ -57,20 +57,63 @@ class ProfileView extends StatelessWidget {
                 const SizedBox(height: 20),
                 Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage:
-                          user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                          ? _getImageProvider(user.avatarUrl!)
-                          : null,
-                      backgroundColor: Colors.white,
-                      child: user.avatarUrl == null || user.avatarUrl!.isEmpty
-                          ? const Icon(
-                              Icons.person,
-                              size: 50,
-                              color: Color(0xFF2196F3),
-                            )
-                          : null,
+                    InkWell(
+                      borderRadius: BorderRadius.circular(50),
+                      onTap: () async {
+                        if (authController.isLoading) return;
+                        
+                        try {
+                          print('=== CLICK KÍCH HOẠT LUỒNG UPLOAD AWS S3 TẠI PROFILE VIEW ===');
+                          
+                          // Hiển thị Dialog Loading nhanh của GetX
+                          Get.dialog(
+                            const Dialog(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+                              child: Padding(
+                                padding: EdgeInsets.all(24),
+                                child: CenterLoading(
+                                  message: 'Đang tải ảnh lên hệ thống AWS S3...\nVui lòng chờ trong giây lát',
+                                ),
+                              ),
+                            ),
+                            barrierDismissible: false,
+                          );
+
+                          String? s3ImageUrl = await GymProStorageService.chooseAndUploadImage();
+                          
+                          // Đóng Dialog Loading ngay sau khi chọn ảnh/upload xong
+                          if (Get.isDialogOpen == true) Get.back();
+
+                          if (s3ImageUrl != null) {
+                            print('➔ Upload S3 thành công, tiến hành lưu và đồng bộ trực tiếp lên Firebase...');
+                            await authController.updateAvatarWithS3Url(s3ImageUrl);
+                            
+                            Get.snackbar(
+                              "Thành công", 
+                              "Đã cập nhật ảnh đại diện lên hệ thống AWS & Firebase!", 
+                              backgroundColor: Colors.green, 
+                              colorText: Colors.white, 
+                              snackPosition: SnackPosition.BOTTOM
+                            );
+                          }
+                        } catch (e) {
+                          if (Get.isDialogOpen == true) Get.back();
+                          print('Lỗi: $e');
+                        }
+                      },
+                      child: Tooltip(
+                        message: "Bấm để thay đổi ảnh đại diện",
+                        child: CircleAvatar(
+                          radius: 50,
+                          backgroundImage: authController.userAccount?.avatarUrl != null && authController.userAccount!.avatarUrl!.isNotEmpty
+                              ? _getImageProvider(authController.userAccount!.avatarUrl!)
+                              : null,
+                          backgroundColor: Colors.white,
+                          child: authController.userAccount?.avatarUrl == null || authController.userAccount!.avatarUrl!.isEmpty
+                              ? const Icon(Icons.person, size: 50, color: Color(0xFF2196F3))
+                              : null,
+                        ),
+                      ),
                     ),
                     Positioned(
                       right: -5,

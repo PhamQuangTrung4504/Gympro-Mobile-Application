@@ -17,6 +17,7 @@ class AuthController extends GetxController {
 
   User? get user => _user.value;
   UserAccount? get userAccount => _userAccount.value;
+  set userAccount(UserAccount? value) => _userAccount.value = value;
   RxBool get isLoggedIn => RxBool(_user.value != null);
   bool get isLoading => _isLoading.value;
 
@@ -299,6 +300,33 @@ class AuthController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+    } finally {
+      _isLoading.value = false;
+    }
+  }
+
+  Future<void> updateAvatarWithS3Url(String s3ImageUrl) async {
+    try {
+      _isLoading.value = true;
+      if (_user.value == null || _userAccount.value == null) return;
+
+      // 1. Cập nhật dữ liệu tạm thời để UI thay đổi ngay lập tức
+      _userAccount.value = _userAccount.value!.copyWith(
+        avatarUrl: s3ImageUrl,
+        updatedAt: DateTime.now(),
+      );
+
+      // 2. Cập nhật trực tiếp URL ảnh S3 này vào document của User trên Firestore
+      final updatedData = {
+        'avatarUrl': s3ImageUrl,
+        'updatedAt': DateTime.now(),
+      };
+      await FirebaseService.updateUserProfile(_user.value!.uid, updatedData);
+
+      // 3. Tải lại tài khoản một lần nữa để chắc chắn đồng bộ thành công
+      await reloadUserAccount();
+    } catch (e) {
+      print('Lỗi đồng bộ link S3 lên Firebase: $e');
     } finally {
       _isLoading.value = false;
     }

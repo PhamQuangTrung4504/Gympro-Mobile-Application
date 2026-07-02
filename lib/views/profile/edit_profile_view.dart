@@ -9,6 +9,7 @@ import '../../widgets/loading_button.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../services/firebase_service.dart';
 import '../settings/data_settings_view.dart';
+import 'package:gympro/services/gympro_storage_service.dart';
 
 class EditProfileView extends StatelessWidget {
   const EditProfileView({super.key});
@@ -44,87 +45,102 @@ class EditProfileView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Profile Photo Section
               Center(
-                child: Stack(
-                  children: [
-                    Obx(() {
-                      final currentUser = authController.userAccount;
-                      return Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 60,
-                            backgroundImage:
-                                currentUser?.avatarUrl != null &&
-                                    currentUser!.avatarUrl!.isNotEmpty
-                                ? _getImageProvider(currentUser.avatarUrl!)
-                                : null,
-                            backgroundColor: Colors.grey[200],
-                            child:
-                                currentUser?.avatarUrl == null ||
-                                    currentUser!.avatarUrl!.isEmpty
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Color(0xFF2196F3),
-                                  )
-                                : null,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(60),
+                  onTap: () async {
+                    if (authController.isLoading) return;
+                    
+                    try {
+                      print('=== CLICK KÍCH HOẠT LUỒNG UPLOAD AWS S3 TOÀN DIỆN ===');
+                      
+                      // Hiển thị Dialog Loading nhanh của GetX
+                      Get.dialog(
+                        const Dialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: CenterLoading(
+                              message: 'Đang tải ảnh lên hệ thống AWS S3...\nVui lòng chờ trong giây lát',
+                            ),
                           ),
-                          if (authController.isLoading)
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.5),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 3,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Color(0xFF00BCD4),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                        ),
+                        barrierDismissible: false,
                       );
-                    }),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Obx(() {
-                        return InkWell(
-                          onTap: authController.isLoading
-                              ? null
-                              : () => _showImageSourceDialog(authController),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF2196F3),
-                              shape: BoxShape.circle,
+
+                      String? s3ImageUrl = await GymProStorageService.chooseAndUploadImage();
+                      
+                      // Đóng Dialog Loading ngay sau khi chọn ảnh/upload xong
+                      if (Get.isDialogOpen == true) Get.back();
+
+                      if (s3ImageUrl != null) {
+                        print('➔ Upload S3 thành công: $s3ImageUrl');
+                        authController.userAccount = authController.userAccount!.copyWith(
+                          avatarUrl: s3ImageUrl,
+                        );
+                        authController.update();
+                      }
+                    } catch (e) {
+                      if (Get.isDialogOpen == true) Get.back();
+                      print('Lỗi: $e');
+                    }
+                  },
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Tầng 1: Hiển thị Avatar vòng tròn
+                      Obx(() {
+                        final currentUser = authController.userAccount;
+                        return CircleAvatar(
+                          radius: 60,
+                          backgroundImage: currentUser?.avatarUrl != null && currentUser!.avatarUrl!.isNotEmpty
+                              ? _getImageProvider(currentUser.avatarUrl!)
+                              : null,
+                          backgroundColor: Colors.grey[200],
+                          child: currentUser?.avatarUrl == null || currentUser!.avatarUrl!.isEmpty
+                              ? const Icon(Icons.person, size: 60, color: Color(0xFF2196F3))
+                              : null,
+                        );
+                      }),
+                      
+                      // Tầng 2: Vòng đen che mờ khi đang trong trạng thái Loading
+                      Obx(() {
+                        if (!authController.isLoading) return const SizedBox.shrink();
+                        return Container(
+                          width: 120,
+                          height: 120,
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00BCD4)),
                             ),
-                            child: authController.isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Color(0xFF00BCD4),
-                                      ),
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
                           ),
                         );
                       }),
-                    ),
-                  ],
+
+                      // Tầng 3: Biểu tượng Camera hiển thị trang trí ở góc dưới bên phải
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF2196F3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -436,17 +452,17 @@ class EditProfileView extends StatelessWidget {
   ) async {
     try {
       isLoading.value = true;
-
       final firebaseService = FirebaseService();
+      
       await firebaseService.updateUser(user.id, {
         'fullName': newFullName,
         'phone': newPhone.isEmpty ? null : newPhone,
         'address': newAddress.isEmpty ? null : newAddress,
         'gender': UserAccount.genderToString(newGender),
         'dob': newDob?.millisecondsSinceEpoch,
+        'avatarUrl': user.avatarUrl, // Bổ sung dòng này để lưu link S3 vĩnh viễn lên Firebase
       });
 
-      // Reload user account to reflect changes immediately
       final authController = Get.find<AuthController>();
       await authController.reloadUserAccount();
 
