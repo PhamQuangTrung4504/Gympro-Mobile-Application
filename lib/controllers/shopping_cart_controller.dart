@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 import 'package:gympro/models/cart_item.dart';
 import 'package:gympro/models/product.dart';
+import 'auth_controller.dart';
 
 class ShoppingCartController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final cartItems = <CartItem>[].obs;
   final isLoading = false.obs;
@@ -17,7 +16,7 @@ class ShoppingCartController extends GetxController {
     loadCart();
   }
 
-  String? get currentUserId => _auth.currentUser?.uid;
+  String? get currentUserId => Get.find<AuthController>().user?.uid;
 
   // Load cart from Firestore
   // Use simple query to get all cart items for current user

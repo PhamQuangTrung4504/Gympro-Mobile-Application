@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import 'auth_controller.dart';
 import '../models/trainer.dart';
 import '../models/trainer_rental.dart';
 
 class TrainerRentalController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Observable lists
   final RxList<Trainer> availableTrainers = <Trainer>[].obs;
@@ -60,7 +59,7 @@ class TrainerRentalController extends GetxController {
   Future<void> loadMyRentals() async {
     try {
       isLoading.value = true;
-      final userId = _auth.currentUser?.uid;
+      final userId = Get.find<AuthController>().user?.uid;
       if (userId == null) return;
 
       final snapshot = await _firestore
@@ -145,7 +144,7 @@ class TrainerRentalController extends GetxController {
     try {
       isSubmitting.value = true;
 
-      final userId = _auth.currentUser?.uid;
+      final userId = Get.find<AuthController>().user?.uid;
       if (userId == null) {
         Get.snackbar('Lỗi', 'Bạn cần đăng nhập để thuê PT');
         return false;
@@ -394,7 +393,7 @@ class TrainerRentalController extends GetxController {
   /// Kiểm tra user có thể đánh giá PT này không
   Future<bool> canReviewTrainer(String trainerId) async {
     try {
-      final userId = _auth.currentUser?.uid;
+      final userId = Get.find<AuthController>().user?.uid;
       if (userId == null) return false;
 
       // 1. Kiểm tra có đơn thuê completed với PT này không
@@ -434,7 +433,7 @@ class TrainerRentalController extends GetxController {
   /// Kiểm tra đã đánh giá PT này chưa
   Future<bool> hasReviewedTrainer(String trainerId) async {
     try {
-      final userId = _auth.currentUser?.uid;
+      final userId = Get.find<AuthController>().user?.uid;
       if (userId == null) return false;
 
       final reviewSnapshot = await _firestore
@@ -462,7 +461,7 @@ class TrainerRentalController extends GetxController {
     try {
       isSubmitting.value = true;
 
-      final userId = _auth.currentUser?.uid;
+      final userId = Get.find<AuthController>().user?.uid;
       if (userId == null) {
         Get.snackbar('Lỗi', 'Bạn cần đăng nhập');
         return false;

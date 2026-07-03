@@ -1,21 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 import 'package:gympro/models/order.dart' as order_model;
 import 'package:gympro/models/shipping_address.dart';
 import 'package:gympro/models/cart_item.dart';
 import 'package:gympro/controllers/shopping_cart_controller.dart';
 import 'dart:math';
+import 'auth_controller.dart';
 
 class OrderController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final orders = <order_model.Order>[].obs;
   final isLoading = false.obs;
   final selectedAddress = Rx<ShippingAddress?>(null);
 
-  String? get currentUserId => _auth.currentUser?.uid;
+  String? get currentUserId => Get.find<AuthController>().user?.uid;
 
   @override
   void onInit() {

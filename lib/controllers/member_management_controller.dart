@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import '../models/user_account.dart';
 import '../models/membership_card.dart';
+import '../services/auth_service.dart';
 import 'trainer_management_controller.dart';
 
 class MemberManagementController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Observable variables
   final RxList<UserAccount> users = <UserAccount>[].obs;
@@ -246,39 +246,24 @@ class MemberManagementController extends GetxController {
 
   // Create new user
   Future<void> createUser(Map<String, dynamic> userData) async {
-    // ✅ STEP 1: Save admin password (ask user once at the beginning)
-    final adminPassword = await _requestAdminPassword();
-    if (adminPassword == null) {
-      // User cancelled password input
-      return;
-    }
-
     try {
       isLoading.value = true;
 
-      // ✅ STEP 2: Save current admin email
-      final currentAdminUser = _auth.currentUser;
-      final adminEmail = currentAdminUser?.email;
-
-      if (adminEmail == null) {
-        throw Exception('Admin must be logged in to create users');
-      }
-
-      // ✅ STEP 3: Create new user in Firebase Auth
-      // WARNING: This will automatically sign in as the new user
-      final credential = await _auth.createUserWithEmailAndPassword(
+      // Create new user in AWS Cognito
+      final signUpResult = await AuthService.registerWithEmailAndPassword(
         email: userData['email'],
         password: userData['password'],
+        fullName: userData['fullName'],
       );
 
-      if (credential.user == null) {
-        throw Exception('Failed to create user account');
+      final String? userId = (signUpResult as CognitoSignUpResult).userId;
+      if (userId == null) {
+        throw Exception('Failed to get Cognito User ID');
       }
 
-      final userId = credential.user!.uid;
       final role = _parseRole(userData['role']);
 
-      // ✅ STEP 4: Create user document in Firestore
+      // Create user document in Firestore
       final userAccount = UserAccount(
         id: userId,
         email: userData['email'],
@@ -298,23 +283,12 @@ class MemberManagementController extends GetxController {
 
       await _firestore.collection('users').doc(userId).set(userAccount.toMap());
 
-      // ✅ STEP 5: If role is trainer, create trainer profile
+      // If role is trainer, create trainer profile
       if (role == Role.trainer) {
         await _createTrainerProfile(userId, userData);
       }
 
-      // ✅ STEP 6: CRITICAL FIX - Sign out the newly created user
-      // This kicks out the auto-login from the new user account
-      await _auth.signOut();
-
-      // ✅ STEP 7: CRITICAL FIX - Re-authenticate as admin
-      // This restores the admin session
-      await _auth.signInWithEmailAndPassword(
-        email: adminEmail,
-        password: adminPassword,
-      );
-
-      // ✅ STEP 8: Reload users list
+      // Reload users list
       await loadAllUsers();
 
       // Set isLoading false

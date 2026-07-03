@@ -77,6 +77,8 @@ dependencies:
 
   # HTTP client for API calls
   http: ^1.1.0
+  amplify_flutter: ^2.6.5
+  amplify_auth_cognito: ^2.6.5
 
 dev_dependencies:
   flutter_test:

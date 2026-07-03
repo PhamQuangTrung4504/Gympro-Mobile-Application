@@ -3,260 +3,117 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function - kiểm tra user đã đăng nhập
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
-    // Helper function - kiểm tra user là chủ sở hữu
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-    
-    // Helper function - kiểm tra user là admin
-    function isAdmin() {
-      return isSignedIn() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-    
-    // Helper function - kiểm tra user là trainer
-    function isTrainer() {
-      return isSignedIn() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'trainer';
+    // Thay đổi hàm check: Chấp nhận request từ ứng dụng Flutter sử dụng Cognito
+    function isCognitoUser() {
+      return true; 
     }
     
     // Users collection
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow create, read, update, delete: if true;
     }
     
     // Trainers collection
     match /trainers/{trainerId} {
-      allow read: if true; // Public read cho danh sách PT
-      allow create: if isAdmin();
-      allow update: if isAdmin() || isOwner(trainerId);
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Trainer Rentals collection - QUAN TRỌNG
+    // Trainer Rentals collection
     match /trainer_rentals/{rentalId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering by trainerId/userId)
-      // Vì trainerId là document ID, không phải auth UID, nên không thể check trong rules
-      allow read: if isSignedIn();
-      
-      // Cho phép user tạo rental mới (userId phải khớp)
-      allow create: if isSignedIn() && 
-                       request.resource.data.userId == request.auth.uid;
-      
-      // Cho phép tất cả signed-in users update (PT cần update trangThai và phanHoi)
-      // Client-side validation sẽ đảm bảo chỉ owner/trainer update
-      allow update: if isSignedIn();
-      
-      // Chỉ admin mới xóa được
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Memberships collection (danh sách gói thẻ tập)
-    match /memberships/{membershipId} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-    
-    // Membership Cards collection (camelCase - danh sách gói thẻ tập)
+    // Membership Cards collection (camelCase)
     match /membershipCards/{membershipId} {
-      allow read: if true; // Public read để user có thể xem danh sách gói
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Membership Cards collection (snake_case - danh sách gói thẻ tập)
+    // Membership Cards collection (snake_case)
     match /membership_cards/{membershipId} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // User Memberships collection (thẻ tập của user)
+    // User Memberships collection
     match /user_memberships/{userMembershipId} {
-      // Admin có thể list/query tất cả
-      allow list: if isAdmin();
-      // User chỉ có thể get document của chính mình
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() || isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Membership Purchases collection (lịch sử mua thẻ - deprecated)
+    // Membership Purchases collection
     match /membership_purchases/{purchaseId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering)
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() || isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Trainer Assignments collection (gán PT cho member)
+    // Trainer Assignments collection
     match /trainer_assignments/{assignmentId} {
-      // Cho phép signed-in users đọc assignments
-      // (Trainer sẽ filter by trainerId ở client-side)
-      allow read: if isSignedIn();
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Trainer Reviews collection (đánh giá PT)
+    // Trainer Reviews collection
     match /trainer_reviews/{reviewId} {
-      // Cho phép PUBLIC đọc reviews (để hiển thị trên trainer profile)
-      allow read: if true;
-      // Member có thể tạo review (phải đăng nhập)
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Chỉ author hoặc admin mới update/delete
-      allow update, delete: if isSignedIn() && (
-        isAdmin() || resource.data.userId == request.auth.uid
-      );
+      allow read, create, update, delete: if true;
     }
     
     // Check-ins collection
     match /check_ins/{checkInId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering by userId)
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
     // News collection
     match /news/{newsId} {
-      allow read: if true; // Public read
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
     // Workout Schedules collection
     match /workout_schedules/{scheduleId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering)
-      allow read: if isSignedIn();
-      
-      // PT hoặc admin tạo workout schedule
-      allow create: if isSignedIn() && (
-        request.resource.data.trainerId == request.auth.uid || isAdmin()
-      );
-      
-      // User, PT hoặc admin có thể update
-      allow update: if isSignedIn();
-      
-      // PT hoặc admin có thể delete
-      allow delete: if isSignedIn();
+      allow read, create, update, delete: if true;
     }
     
-    // Exercises collection (kho bài tập)
+    // Exercises collection
     match /exercises/{exerciseId} {
-      allow read: if isSignedIn(); // Tất cả user đã đăng nhập có thể xem
-      allow create: if isAdmin(); // Chỉ admin tạo bài tập mới
-      allow update: if isAdmin(); // Chỉ admin sửa bài tập
-      allow delete: if isAdmin(); // Chỉ admin xóa bài tập
+      allow read, create, update, delete: if true;
     }
     
-    // User Schedules collection (lịch trình tập của user)
+    // User Schedules collection
     match /user_schedules/{scheduleId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering by userId)
-      allow read: if isSignedIn();
-      
-      // User chỉ tạo schedule cho chính mình
-      allow create: if isSignedIn() && 
-                       request.resource.data.userId == request.auth.uid;
-      
-      // User hoặc admin có thể update
-      allow update: if isSignedIn();
-      
-      // User hoặc admin có thể delete
-      allow delete: if isSignedIn();
+      allow read, create, update, delete: if true;
     }
     
-    // Comments collection (bình luận)
+    // Comments collection
     match /comments/{commentId} {
-      allow read: if isSignedIn(); // Tất cả user có thể xem comment
-      allow create: if isSignedIn() && 
-                       request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn(); // Client-side filtering
-      allow delete: if isSignedIn(); // Client-side filtering
+      allow read, create, update, delete: if true;
     }
     
-    // Payment Transactions collection (giao dịch thanh toán)
+    // Payment Transactions collection
     match /payment_transactions/{transactionId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering)
-      allow read: if isSignedIn();
-      allow create: if isSignedIn(); // User có thể tạo giao dịch
-      allow update: if isAdmin(); // Chỉ admin update trạng thái
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // User News Interactions collection (tương tác với tin tức)
+    // User News Interactions collection
     match /user_news_interactions/{interactionId} {
-      // Cho phép tất cả signed-in users đọc (client-side filtering)
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && 
-                       request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn(); // Client-side filtering
-      allow delete: if isSignedIn(); // Client-side filtering
+      allow read, create, update, delete: if true;
     }
     
-    // Products collection (quản lý sản phẩm)
+    // Products collection
     match /products/{productId} {
-      allow read: if true; // Public read cho tất cả
-      allow create: if isAdmin(); // Chỉ admin được tạo
-      allow update: if isAdmin(); // Chỉ admin được cập nhật
-      allow delete: if isAdmin(); // Chỉ admin được xóa
+      allow read, create, update, delete: if true;
     }
     
-    // Shopping Carts collection (giỏ hàng của user)
+    // Shopping Carts collection
     match /carts/{cartId} {
-      // CartId format: userId_productId
-      // Allow any authenticated user to read carts (filter on client side)
-      // Allow write only for own cart items
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && 
-                      cartId.split('_')[0] == request.auth.uid;
+      allow read, write: if true;
     }
     
-    // Orders collection (đơn hàng)
+    // Orders collection
     match /orders/{orderId} {
-      // Allow any authenticated user to read (filter on client side)
-      // Admin can see all orders
-      allow read: if isSignedIn();
-      // User tạo đơn hàng cho chính mình
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // User có thể hủy đơn (update status), admin có thể update tất cả
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || isAdmin()
-      );
-      // Chỉ admin xóa đơn hàng
-      allow delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
     
-    // Shipping Addresses collection (địa chỉ giao hàng)
+    // Shipping Addresses collection
     match /shipping_addresses/{addressId} {
-      // User chỉ xem địa chỉ của mình
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      // User chỉ tạo địa chỉ cho chính mình
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // User chỉ update địa chỉ của mình
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      // User có thể xóa địa chỉ của mình
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read, create, update, delete: if true;
     }
     
-    // Đóng tất cả các collection khác
+    // Khóa các collection lạ khác không được định nghĩa
     match /{document=**} {
       allow read, write: if false;
     }

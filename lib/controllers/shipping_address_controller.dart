@@ -1,17 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 import 'package:gympro/models/shipping_address.dart';
+import 'auth_controller.dart';
 
 class ShippingAddressController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final addresses = <ShippingAddress>[].obs;
   final isLoading = false.obs;
   final defaultAddress = Rx<ShippingAddress?>(null);
 
-  String? get currentUserId => _auth.currentUser?.uid;
+  String? get currentUserId => Get.find<AuthController>().user?.uid;
 
   @override
   void onInit() {

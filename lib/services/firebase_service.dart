@@ -36,6 +36,30 @@ class FirebaseService {
     }
   }
 
+  static Future<void> createCognitoUserDocument({
+    required String userId,
+    required String email,
+    required String fullName,
+  }) async {
+    try {
+      final userAccount = UserAccount(
+        id: userId,
+        fullName: fullName,
+        avatarUrl: null,
+        email: email,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .set(userAccount.toMap());
+    } catch (e) {
+      throw Exception('Failed to create user document: $e');
+    }
+  }
+
   Future<void> createUser(UserAccount userAccount) async {
     try {
       await usersCollection.doc(userAccount.id).set(userAccount.toMap());

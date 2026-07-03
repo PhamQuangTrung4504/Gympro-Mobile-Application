@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/firebase_service.dart';
@@ -11,11 +12,11 @@ import '../routes/app_routes.dart';
 class AuthController extends GetxController {
   static AuthController get instance => Get.find();
 
-  final Rx<User?> _user = Rx<User?>(null);
+  final Rx<CognitoUser?> _user = Rx<CognitoUser?>(null);
   final Rx<UserAccount?> _userAccount = Rx<UserAccount?>(null);
   final RxBool _isLoading = false.obs;
 
-  User? get user => _user.value;
+  CognitoUser? get user => _user.value;
   UserAccount? get userAccount => _userAccount.value;
   set userAccount(UserAccount? value) => _userAccount.value = value;
   RxBool get isLoggedIn => RxBool(_user.value != null);
@@ -24,21 +25,44 @@ class AuthController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _user.value = AuthService.currentUser;
-
-    // Listen to auth state changes
-    AuthService.authStateChanges.listen((User? user) {
-      _user.value = user;
-      if (user != null) {
-        _loadUserAccount(user.uid);
-      } else {
-        _userAccount.value = null;
-      }
+    
+    // Lắng nghe biến _user thay đổi để cập nhật phiên đồng bộ sang AuthService công khai
+    ever(_user, (CognitoUser? user) {
+      AuthService.currentUser = user;
     });
 
-    // Load user account if user is already signed in
-    if (_user.value != null) {
-      _loadUserAccount(_user.value!.uid);
+    checkCurrentUserSession();
+  }
+
+  Future<void> checkCurrentUserSession() async {
+    try {
+      final uid = await AuthService.currentUserId;
+      if (uid != null) {
+        final userDetails = await Amplify.Auth.getCurrentUser();
+        final attributes = await Amplify.Auth.fetchUserAttributes();
+        String email = '';
+        String name = '';
+        for (final attribute in attributes) {
+          if (attribute.userAttributeKey == AuthUserAttributeKey.email) {
+            email = attribute.value;
+          } else if (attribute.userAttributeKey == AuthUserAttributeKey.name) {
+            name = attribute.value;
+          }
+        }
+        _user.value = CognitoUser(
+          uid: userDetails.userId,
+          email: email,
+          displayName: name,
+        );
+        await _loadUserAccount(uid);
+      } else {
+        _user.value = null;
+        _userAccount.value = null;
+      }
+    } catch (e) {
+      print('Error checking user session: $e');
+      _user.value = null;
+      _userAccount.value = null;
     }
   }
 
@@ -78,14 +102,42 @@ class AuthController extends GetxController {
   Future<void> signIn(String email, String password) async {
     try {
       _isLoading.value = true;
-      final userCredential = await AuthService.signInWithEmailAndPassword(
+      final success = await AuthService.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // Wait for user account to be loaded
-      if (userCredential?.user != null) {
-        await _loadUserAccount(userCredential!.user!.uid);
+      if (success) {
+        final userDetails = await Amplify.Auth.getCurrentUser();
+        final attributes = await Amplify.Auth.fetchUserAttributes();
+        String name = '';
+        String userEmail = email;
+        for (final attribute in attributes) {
+          if (attribute.userAttributeKey == AuthUserAttributeKey.email) {
+            userEmail = attribute.value;
+          } else if (attribute.userAttributeKey == AuthUserAttributeKey.name) {
+            name = attribute.value;
+          }
+        }
+
+        _user.value = CognitoUser(
+          uid: userDetails.userId,
+          email: userEmail,
+          displayName: name,
+        );
+
+        final firebaseService = FirebaseService();
+        var account = await firebaseService.getUser(userDetails.userId);
+        if (account == null) {
+          // Fallback: Create Firestore document on demand if it doesn't exist
+          await FirebaseService.createCognitoUserDocument(
+            userId: userDetails.userId,
+            email: userEmail,
+            fullName: name,
+          );
+          account = await firebaseService.getUser(userDetails.userId);
+        }
+        _userAccount.value = account;
 
         // Navigate based on user role
         if (_userAccount.value?.isTrainer == true) {
@@ -93,13 +145,11 @@ class AuthController extends GetxController {
         } else {
           Get.offAllNamed(AppRoutes.home);
         }
-      } else {
-        Get.offAllNamed(AppRoutes.home);
       }
     } catch (e) {
       Get.snackbar(
         'Lỗi Đăng Nhập',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -110,30 +160,110 @@ class AuthController extends GetxController {
   Future<void> register(String email, String password, String fullName) async {
     try {
       _isLoading.value = true;
-      await AuthService.registerWithEmailAndPassword(
+      final signUpResult = await AuthService.registerWithEmailAndPassword(
         email: email,
         password: password,
         fullName: fullName,
       );
 
-      // Sign out after registration to force user to login
-      await AuthService.signOut();
+      final String? cognitoUserId = (signUpResult as CognitoSignUpResult).userId;
+      if (cognitoUserId != null) {
+        // Tạo document dữ liệu thô bên Firebase Firestore để quản lý nghiệp vụ phòng gym
+        await FirebaseService.createCognitoUserDocument(
+          userId: cognitoUserId,
+          email: email,
+          fullName: fullName,
+        );
+      }
 
-      // Navigate back to login with success message
-      Get.offAllNamed(AppRoutes.login);
-      Get.snackbar(
-        'Đăng Ký Thành Công',
-        'Tài khoản đã được tạo thành công! Vui lòng đăng nhập.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
-      );
+      if (signUpResult.isSignUpComplete) {
+        Get.offAllNamed(AppRoutes.login);
+        Get.snackbar(
+          'Đăng Ký Thành Công',
+          'Tài khoản đã được tạo thành công! Vui lòng đăng nhập.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+      } else {
+        _showOtpDialog(email, fullName);
+      }
     } catch (e) {
       Get.snackbar(
         'Lỗi Đăng Ký',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
         snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      _isLoading.value = false;
+    }
+  }
+
+  void _showOtpDialog(String email, String fullName) {
+    final otpController = TextEditingController();
+    Get.dialog(
+      AlertDialog(
+        title: const Text('Xác Thực Email'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Mã xác thực OTP đã được gửi đến email $email. Vui lòng nhập mã để kích hoạt tài khoản.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: otpController,
+              decoration: const InputDecoration(
+                labelText: 'Mã OTP',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final otpCode = otpController.text.trim();
+              if (otpCode.isNotEmpty) {
+                Get.back();
+                confirmRegisterOTP(email, otpCode, fullName);
+              } else {
+                Get.snackbar('Lỗi', 'Vui lòng nhập mã OTP');
+              }
+            },
+            child: const Text('Xác Nhận'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  Future<void> confirmRegisterOTP(String email, String otpCode, String fullName) async {
+    try {
+      _isLoading.value = true;
+      final isComplete = await AuthService.confirmSignUp(
+        email: email,
+        confirmationCode: otpCode,
+        fullName: fullName,
+      );
+      if (isComplete) {
+        Get.offAllNamed(AppRoutes.login);
+        Get.snackbar(
+          'Xác Thực Thành Công',
+          'Tài khoản của bạn đã được kích hoạt. Hãy đăng nhập nhé!',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Lỗi Xác Thực',
+        e.toString().replaceAll('Exception: ', ''),
       );
     } finally {
       _isLoading.value = false;
@@ -144,6 +274,8 @@ class AuthController extends GetxController {
     try {
       _isLoading.value = true;
       await AuthService.signOut();
+      _user.value = null;
+      _userAccount.value = null;
       Get.offAllNamed(AppRoutes.login);
     } catch (e) {
       Get.snackbar(
@@ -168,7 +300,7 @@ class AuthController extends GetxController {
     } catch (e) {
       Get.snackbar(
         'Lỗi Đặt Lại Mật Khẩu',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -196,7 +328,7 @@ class AuthController extends GetxController {
     } catch (e) {
       Get.snackbar(
         'Lỗi Đổi Mật Khẩu',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
@@ -209,12 +341,15 @@ class AuthController extends GetxController {
   Future<void> deleteAccount() async {
     try {
       _isLoading.value = true;
-      await AuthService.deleteAccount();
+      await AuthService.deleteAccount(_user.value?.uid);
 
       // Đóng loading dialog nếu đang mở
       if (Get.isDialogOpen == true) {
         Get.back();
       }
+
+      _user.value = null;
+      _userAccount.value = null;
 
       Get.offAllNamed(AppRoutes.login);
       Get.snackbar(
@@ -232,7 +367,7 @@ class AuthController extends GetxController {
 
       Get.snackbar(
         'Lỗi Xóa Tài Khoản',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
